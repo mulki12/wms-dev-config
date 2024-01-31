@@ -1,0 +1,101 @@
+{{- $fullname := include "wms-dev.fullname" . -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "wms-dev.fullname" . }}
+  labels:
+{{ include "wms-dev.labels" . | indent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ include "wms-dev.name" . }}
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: {{ include "wms-dev.name" . }}
+        app.kubernetes.io/instance: {{ .Release.Name }}
+    spec:
+    {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+    {{- end }}
+      serviceAccountName: {{ template "wms-dev.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      {{- if .Values.hostAliases}}
+      hostAliases:
+         {{- toYaml .Values.hostAliases | nindent 12 }}
+      {{- end }}   
+      containers:
+        - name: {{ .Chart.Name }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          ports:
+            - name: http
+              containerPort: 80
+              protocol: TCP
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          {{- if or .Values.secrets .Values.configmaps .Values.persistences.enabled}}
+          volumeMounts:
+          {{- range $secret:= .Values.secrets}}
+            - name: {{ $secret.name }}
+              mountPath: {{$secret.mountPath }}
+            {{- if $secret.subPath}}
+              subPath: {{$secret.subPath }}
+            {{- end }}
+          {{- end }}
+          {{- range $configmap:= .Values.configmaps}}
+            - name: {{ $configmap.name }}
+              mountPath: {{$configmap.mountPath }}
+            {{- if $configmap.subPath}}
+              subPath: {{$configmap.subPath }}
+            {{- end }}
+          {{- end }}
+          {{- range $pvc:= .Values.persistences.volumeClaims}}
+            - name: {{ $pvc.name }}
+              mountPath: {{$pvc.mountPath }}
+            {{- if $pvc.subPath}}
+              subPath: {{$pvc.subPath }}
+            {{- end }}
+          {{- end }}
+          
+          env:
+            {{- toYaml .Values.env | nindent 12 }}
+          {{- end }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+    {{- end }}
+    {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+    {{- end }}
+      volumes:
+      {{- if or .Values.secrets .Values.configmaps .Values.persistences.enabled}}
+      {{- range $secret:= .Values.secrets}}
+        - name: {{ $secret.name }}
+          secret: 
+            secretName: "{{ $fullname }}-{{ $secret.name }}"
+      {{- end }}
+      {{- range $configmap:= .Values.configmaps}}
+        - name: {{ $configmap.name }}
+          configMap:
+            name: "{{ $fullname }}-{{ $configmap.name }}"
+      {{- end }}
+      {{- range $pvc:= .Values.persistences.volumeClaims}}
+        - name: {{ $pvc.name }}
+          persistentVolumeClaim:
+            claimName: "pvc-{{ $fullname }}-{{ $pvc.name }}"
+      {{- end }}
+      {{- else }}
+        []
+      {{- end }}

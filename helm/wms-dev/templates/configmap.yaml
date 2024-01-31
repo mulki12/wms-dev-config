@@ -1,0 +1,18 @@
+{{- $fullname := include "wms-dev.fullname" . -}}
+{{- $labels := include "wms-dev.labels" .  }}
+{{- $Files := .Files -}}
+
+{{- range $configmap := .Values.configmaps}}
+apiVersion: v1
+kind: ConfigMap
+metadata: 
+  name: "{{ $fullname }}-{{ $configmap.name }}"
+  labels:
+{{ $labels | indent 4 }}
+data:
+  {{- $path := printf "config/configmaps/%s" $configmap.file }}
+  {{- ($Files.Glob $path).AsConfig | nindent 2 }}
+
+
+---
+{{- end }}
